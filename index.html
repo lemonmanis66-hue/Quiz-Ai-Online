@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Quiz AI berbasis materi belajar dengan evaluasi dan adaptive learning.">
+<title>Quiz AI — Adaptive Learning</title>
+<style>
+:root{--bg:#0b1020;--card:#151d33;--card2:#1b2640;--text:#eef3ff;--muted:#aeb9d3;--accent:#7c9cff;--ok:#55d98a;--bad:#ff7272;--border:#2a385b}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(135deg,#0b1020,#111b31);color:var(--text)}
+main{max-width:1000px;margin:auto;padding:22px}.hero{padding:24px 0}.hero h1{font-size:clamp(28px,6vw,48px);margin:0 0 8px}.hero p{color:var(--muted)}
+.card{background:rgba(21,29,51,.95);border:1px solid var(--border);border-radius:20px;padding:20px;margin:16px 0;box-shadow:0 10px 35px #0003}
+textarea{width:100%;min-height:210px;resize:vertical;background:#0e1629;color:var(--text);border:1px solid var(--border);border-radius:14px;padding:14px;font:inherit}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.field label{display:block;color:var(--muted);font-size:14px;margin-bottom:6px}
+select,input[type=file]{width:100%;padding:11px;background:#0e1629;color:var(--text);border:1px solid var(--border);border-radius:11px}
+button{border:0;border-radius:12px;padding:12px 17px;background:var(--accent);color:#081020;font-weight:800;cursor:pointer}button.secondary{background:var(--card2);color:var(--text);border:1px solid var(--border)}button:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}.hidden{display:none!important}.bar{height:9px;background:#273454;border-radius:99px;overflow:hidden}.bar>div{height:100%;background:var(--accent);width:0}
+.option{display:block;width:100%;text-align:left;margin:10px 0;background:#101a30;color:var(--text);border:1px solid var(--border)}.option.selected{outline:2px solid var(--accent)}
+.option.correct{border-color:var(--ok)}.option.wrong{border-color:var(--bad)}
+.meta{color:var(--muted);font-size:14px}.score{font-size:52px;font-weight:900}.pill{display:inline-block;padding:5px 9px;border-radius:99px;background:#243254;color:#cbd6ff;font-size:12px}
+.review{border-top:1px solid var(--border);padding:16px 0}.good{color:var(--ok)}.bad{color:var(--bad)}
+ul{padding-left:22px}.loading{text-align:center;padding:30px}.spinner{width:35px;height:35px;border:4px solid #33405f;border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;margin:auto}@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:700px){main{padding:14px}.grid{grid-template-columns:1fr}.card{padding:15px}.score{font-size:42px}}
+</style>
+</head>
+<body>
+<main>
+<section class="hero">
+  <span class="pill">AI • Adaptive Learning • HTTPS Ready</span>
+  <h1>Quiz AI</h1>
+  <p>Masukkan materi → AI membuat soal → kamu mengerjakan → AI menganalisis kelemahan → latihan ulang.</p>
+</section>
+
+<section id="setup" class="card">
+  <h2>1. Masukkan Materi</h2>
+  <textarea id="material" placeholder="Tempel materi pelajaran di sini..."></textarea>
+  <p class="meta">Atau upload file:</p>
+  <input id="file" type="file" accept=".txt,.pdf,.docx">
+  <div class="grid" style="margin-top:15px">
+    <div class="field"><label>Jumlah soal</label><select id="count"><option>5</option><option selected>10</option><option>15</option><option>20</option><option>30</option></select></div>
+    <div class="field"><label>Kesulitan</label><select id="difficulty"><option>Easy</option><option>Medium</option><option>Hard</option><option selected>Mixed</option></select></div>
+    <div class="field"><label>Mode</label><select id="mode"><option value="normal">Quiz</option><option value="learning">Learning Loop</option></select></div>
+  </div>
+  <div class="actions"><button id="generate">🚀 Buat Quiz dengan AI</button></div>
+  <p id="error" class="bad"></p>
+</section>
+
+<section id="loading" class="card hidden"><div class="loading"><div class="spinner"></div><h3>AI sedang menyusun soal...</h3><p class="meta">Memeriksa materi dan membuat pilihan jawaban.</p></div></section>
+
+<section id="quiz" class="card hidden">
+  <div style="display:flex;justify-content:space-between;gap:10px"><b id="qnum"></b><span id="topic" class="pill"></span></div>
+  <div class="bar" style="margin:12px 0 20px"><div id="progress"></div></div>
+  <h2 id="question"></h2>
+  <div id="options"></div>
+  <div class="actions"><button id="next" disabled>Berikutnya →</button></div>
+</section>
+
+<section id="result" class="card hidden">
+  <h2>Hasil Quiz</h2>
+  <div id="score" class="score"></div>
+  <p id="summary"></p>
+  <div id="evaluation"></div>
+  <div class="actions">
+    <button id="practice">🧠 Latihan Topik Lemah</button>
+    <button id="newquiz" class="secondary">Quiz Baru</button>
+  </div>
+  <h3>Review</h3>
+  <div id="review"></div>
+</section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+let quiz=null,index=0,answers=[],lastResult=null;
+
+$("generate").onclick=async()=>{
+  $("error").textContent="";
+  const text=$("material").value.trim(), file=$("file").files[0];
+  if(!text && !file){$("error").textContent="Masukkan teks atau upload file.";return}
+  const fd=new FormData();
+  if(text)fd.append("text",text);
+  if(file)fd.append("file",file);
+  fd.append("count",$("count").value);fd.append("difficulty",$("difficulty").value);
+  $("setup").classList.add("hidden");$("loading").classList.remove("hidden");
+  try{
+    const r=await fetch("/api/generate",{method:"POST",body:fd});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||"Gagal membuat quiz");
+    quiz=d;index=0;answers=Array(d.questions.length).fill(null);
+    $("loading").classList.add("hidden");$("quiz").classList.remove("hidden");renderQ();
+  }catch(e){$("loading").classList.add("hidden");$("setup").classList.remove("hidden");$("error").textContent=e.message}
+};
+
+function renderQ(){
+ const q=quiz.questions[index];
+ $("qnum").textContent=`Soal ${index+1} / ${quiz.questions.length}`;
+ $("topic").textContent=q.topic;
+ $("progress").style.width=`${index/quiz.questions.length*100}%`;
+ $("question").textContent=q.question;
+ $("options").innerHTML="";
+ q.options.forEach((op,i)=>{
+   const b=document.createElement("button");b.className="option";b.textContent=`${String.fromCharCode(65+i)}. ${op}`;
+   if(answers[index]===i)b.classList.add("selected");
+   b.onclick=()=>{answers[index]=i;document.querySelectorAll(".option").forEach(x=>x.classList.remove("selected"));b.classList.add("selected");$("next").disabled=false};
+   $("options").appendChild(b);
+ });
+ $("next").textContent=index===quiz.questions.length-1?"Selesai ✓":"Berikutnya →";
+ $("next").disabled=answers[index]===null;
+}
+$("next").onclick=()=>{if(index<quiz.questions.length-1){index++;renderQ()}else finish()};
+
+function finish(){
+ const qs=quiz.questions;
+ let correct=0;const topicStats={};
+ qs.forEach((q,i)=>{
+   const ok=answers[i]===q.answer;if(ok)correct++;
+   const t=q.topic||"Umum";topicStats[t]??={correct:0,total:0};topicStats[t].total++;if(ok)topicStats[t].correct++;
+ });
+ const pct=Math.round(correct/qs.length*100);
+ lastResult={correct,pct,topicStats};
+ $("quiz").classList.add("hidden");$("result").classList.remove("hidden");
+ $("score").textContent=`${pct}%`;
+ $("summary").textContent=`${correct} benar dari ${qs.length} soal.`;
+ const weak=Object.entries(topicStats).filter(([t,s])=>s.correct<s.total).sort((a,b)=>(a[1].correct/a[1].total)-(b[1].correct/b[1].total));
+ let html=`<h3>Evaluasi</h3>`;
+ if(!weak.length)html+=`<p class="good">Semua topik dijawab benar. Pertahankan dan coba tingkat kesulitan lebih tinggi.</p>`;
+ else{
+   html+=`<p>Topik yang perlu diperkuat:</p><ul>${weak.map(([t,s])=>`<li><b>${escape(t)}</b>: ${s.correct}/${s.total} benar</li>`).join("")}</ul>`;
+   html+=`<p>Fokus belajar kembali pada definisi, hubungan konsep, dan contoh penerapan dari topik tersebut sebelum mengulang.</p>`;
+ }
+ $("evaluation").innerHTML=html;
+ $("review").innerHTML=qs.map((q,i)=>{
+   const ok=answers[i]===q.answer;
+   return `<div class="review"><b>${i+1}. ${escape(q.question)}</b><p class="${ok?"good":"bad"}">${ok?"✓ Benar":"✗ Salah"}</p>
+   <p>Jawaban benar: <b>${escape(q.options[q.answer])}</b></p>
+   <p class="meta">${escape(q.explanation||"Tidak ada pembahasan.")}</p></div>`
+ }).join("");
+ saveHistory({title:quiz.title,score:pct,correct,total:qs.length,date:new Date().toISOString()});
+}
+
+$("practice").onclick=async()=>{
+ if(!lastResult)return;
+ const weak=Object.entries(lastResult.topicStats).filter(([t,s])=>s.correct<s.total).map(x=>x[0]);
+ if(!weak.length){alert("Tidak ada topik lemah. Coba quiz dengan kesulitan lebih tinggi.");return}
+ const original=$("material").value.trim();
+ const focus=`Fokus latihan pada topik: ${weak.join(", ")}. Buat latihan baru yang menargetkan miskonsepsi dan penerapan konsep.`;
+ $("material").value=original+"\n\n"+focus;
+ $("result").classList.add("hidden");$("setup").classList.remove("hidden");
+ window.scrollTo({top:0,behavior:"smooth"});
+ $("difficulty").value="Medium";
+ $("count").value="5";
+};
+
+$("newquiz").onclick=()=>{quiz=null;lastResult=null;$("result").classList.add("hidden");$("setup").classList.remove("hidden");window.scrollTo({top:0,behavior:"smooth"})};
+
+function escape(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function saveHistory(item){
+ const key="quiz-ai-history-v2";const old=JSON.parse(localStorage.getItem(key)||"[]");old.unshift(item);localStorage.setItem(key,JSON.stringify(old.slice(0,50)));
+}
+</script>
+</body>
+</html>

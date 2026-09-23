@@ -1,0 +1,23 @@
+{
+  "name": "quiz-ai-online",
+  "version": "2.0.0",
+  "private": true,
+  "description": "AI-powered quiz generator with adaptive learning",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "compression": "^1.7.5",
+    "express": "^4.21.2",
+    "helmet": "^8.1.0",
+    "mammoth": "^1.8.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "rate-limiter-flexible": "^6.2.1"
+  }
+}
